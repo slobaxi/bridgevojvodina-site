@@ -85,6 +85,20 @@ class DoubleDummyAnalysisService
             throw new RuntimeException('DDS analyzer binary is missing. Build storage/app/bin/dds_analyze first.');
         }
 
+        $output = $this->canUsePhpFunction('proc_open')
+            ? $this->runAnalyzerWithProcess($command)
+            : $this->runAnalyzerWithExec($command);
+
+        $decoded = json_decode($output, true);
+        if (! is_array($decoded)) {
+            throw new RuntimeException('DDS analyzer returned invalid JSON.');
+        }
+
+        return $decoded;
+    }
+
+    private function runAnalyzerWithProcess(array $command): string
+    {
         $process = new Process($command, base_path());
         $process->setTimeout((float) config('services.dds_analyzer.timeout', 30));
         $process->run();
@@ -97,12 +111,56 @@ class DoubleDummyAnalysisService
             throw new RuntimeException($message);
         }
 
-        $decoded = json_decode($output, true);
-        if (! is_array($decoded)) {
-            throw new RuntimeException('DDS analyzer returned invalid JSON.');
+        return $output;
+    }
+
+    private function runAnalyzerWithExec(array $command): string
+    {
+        if (! $this->canUsePhpFunction('exec')) {
+            throw new RuntimeException('DDS analysis requires proc_open or exec, but both are disabled on this PHP installation.');
         }
 
-        return $decoded;
+        $previousDirectory = getcwd();
+
+        if ($previousDirectory === false || ! chdir(base_path())) {
+            throw new RuntimeException('DDS analyzer could not enter the application directory.');
+        }
+
+        try {
+            $lines = [];
+            $exitCode = 0;
+            exec($this->toShellCommand($command) . ' 2>&1', $lines, $exitCode);
+            $output = trim(implode("\n", $lines));
+        } finally {
+            chdir($previousDirectory);
+        }
+
+        if ($exitCode !== 0) {
+            throw new RuntimeException($output !== '' ? $output : 'DDS analyzer failed.');
+        }
+
+        return $output;
+    }
+
+    private function toShellCommand(array $command): string
+    {
+        return collect($command)
+            ->map(fn(string $part): string => escapeshellarg($part))
+            ->implode(' ');
+    }
+
+    private function canUsePhpFunction(string $function): bool
+    {
+        if (! function_exists($function)) {
+            return false;
+        }
+
+        $disabled = array_map(
+            'trim',
+            explode(',', (string) ini_get('disable_functions'))
+        );
+
+        return ! in_array($function, $disabled, true);
     }
 
     private function normalizeTable(array $engineTable): array
