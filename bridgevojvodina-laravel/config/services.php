@@ -35,9 +35,4 @@ return [
         ],
     ],
 
-    'dds_analyzer' => [
-        'command' => env('DDS_ANALYZER_COMMAND', storage_path('app/bin/dds_analyze')),
-        'timeout' => env('DDS_ANALYZER_TIMEOUT', 30),
-    ],
-
 ];

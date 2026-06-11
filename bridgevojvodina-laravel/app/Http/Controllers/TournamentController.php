@@ -417,32 +417,6 @@ class TournamentController extends Controller
             ->with('success', __('Board set deleted successfully.'));
     }
 
-    public function analyzeBoardDoubleDummy(string $tournamentId, BoardSet $boardSet, Board $board): RedirectResponse
-    {
-        $tournament = $this->resolveTournament($tournamentId);
-        $this->authorizeTournament($tournament);
-
-        if ($boardSet->tournament_id !== $tournament->id && $boardSet->tournament_configuration_id !== $tournament->id) {
-            abort(404);
-        }
-
-        if ($board->board_set_id !== $boardSet->id) {
-            abort(404);
-        }
-
-        try {
-            $board->update([
-                'double_dummy_analysis' => $this->doubleDummyAnalysisService->analyze($board),
-            ]);
-        } catch (\Throwable $exception) {
-            return back()->withErrors([
-                'double_dummy_analysis' => $exception->getMessage(),
-            ]);
-        }
-
-        return back()->with('success', __('Double dummy analysis added successfully.'));
-    }
-
     public function updateBoard(Request $request, string $tournamentId, BoardSet $boardSet, Board $board): RedirectResponse
     {
         $tournament = $this->resolveTournament($tournamentId);
@@ -497,50 +471,7 @@ class TournamentController extends Controller
             'double_dummy_analysis' => null,
         ]);
 
-        return back()->with('success', __('Board updated successfully. Double dummy analysis was cleared.'));
-    }
-
-    public function analyzeBoardSetDoubleDummy(string $tournamentId, BoardSet $boardSet): RedirectResponse
-    {
-        $tournament = $this->resolveTournament($tournamentId);
-        $this->authorizeTournament($tournament);
-
-        if ($boardSet->tournament_id !== $tournament->id && $boardSet->tournament_configuration_id !== $tournament->id) {
-            abort(404);
-        }
-
-        @set_time_limit(0);
-
-        $boards = $boardSet->boards()->orderBy('board_number')->get();
-        if ($boards->isEmpty()) {
-            return back()->withErrors([
-                'double_dummy_analysis' => __('No boards found in this board set.'),
-            ]);
-        }
-
-        $analyzed = 0;
-        $currentBoardNumber = null;
-
-        try {
-            foreach ($boards as $board) {
-                $currentBoardNumber = $board->board_number;
-                $board->update([
-                    'double_dummy_analysis' => $this->doubleDummyAnalysisService->analyze($board),
-                ]);
-                $analyzed++;
-            }
-        } catch (\Throwable $exception) {
-            return back()->withErrors([
-                'double_dummy_analysis' => __('Board :board: :message', [
-                    'board' => $currentBoardNumber ?? '?',
-                    'message' => $exception->getMessage(),
-                ]),
-            ]);
-        }
-
-        return back()->with('success', __('Double dummy analysis added for :count boards.', [
-            'count' => $analyzed,
-        ]));
+        return back()->with('success', __('Board updated successfully. Imported double dummy analysis was cleared.'));
     }
 
     private function normalizeAndValidateBoardHands(array $cards): array
@@ -594,6 +525,16 @@ class TournamentController extends Controller
         }
 
         return $normalizedHands;
+    }
+
+    private function normalizePbnVulnerability(string $vulnerability): string
+    {
+        return match (strtoupper(str_replace(['-', ' '], '', $vulnerability))) {
+            'NS', 'NORTHSOUTH' => 'NS',
+            'EW', 'EASTWEST' => 'EW',
+            'ALL', 'BOTH' => 'All',
+            default => 'None',
+        };
     }
 
     public function update(Request $request, string $id): RedirectResponse
@@ -663,25 +604,50 @@ class TournamentController extends Controller
         $boardsData = [];
         $eventName = 'Imported Board Set';
         $currentBoard = null;
+        $readingOptimumTable = false;
 
         $lines = explode("\n", $content);
         foreach ($lines as $line) {
             $line = trim($line);
-            if (empty($line)) continue;
+            if (empty($line)) {
+                $readingOptimumTable = false;
+                continue;
+            }
 
             if (preg_match('/^\[Event "(.+)"\]$/', $line, $matches)) {
                 if ($eventName === 'Imported Board Set' && !empty($matches[1])) {
                     $eventName = $matches[1];
                 }
+                $readingOptimumTable = false;
             } elseif (preg_match('/^\[Board "(.+)"\]$/', $line, $matches)) {
                 if ($currentBoard !== null && isset($currentBoard['deal'])) {
                     $boardsData[] = $currentBoard;
                 }
                 $currentBoard = ['board_number' => $matches[1]];
+                $readingOptimumTable = false;
+            } elseif (preg_match('/^\[Vulnerable "(.+)"\]$/', $line, $matches)) {
+                if ($currentBoard === null) $currentBoard = [];
+                $currentBoard['vulnerability'] = $this->normalizePbnVulnerability($matches[1]);
+                $readingOptimumTable = false;
             } elseif (preg_match('/^\[Deal "(.+):(.+)"\]$/', $line, $matches)) {
                 if ($currentBoard === null) $currentBoard = [];
                 $currentBoard['dealer'] = $matches[1];
                 $currentBoard['deal'] = $matches[2];
+                $readingOptimumTable = false;
+            } elseif (preg_match('/^\[OptimumScore "(.+)"\]$/', $line, $matches)) {
+                if ($currentBoard === null) $currentBoard = [];
+                $currentBoard['optimum_score'] = $matches[1];
+                $readingOptimumTable = false;
+            } elseif (preg_match('/^\[OptimumResultTable\b/', $line)) {
+                if ($currentBoard === null) $currentBoard = [];
+                $currentBoard['double_dummy_table'] = [];
+                $readingOptimumTable = true;
+            } elseif ($readingOptimumTable && preg_match('/^([NESW])\s+(N|NT|S|H|D|C)\s+(-?\d+)$/i', $line, $matches)) {
+                $hand = strtoupper($matches[1]);
+                $strain = strtoupper($matches[2]) === 'N' ? 'NT' : strtoupper($matches[2]);
+                $currentBoard['double_dummy_table'][$hand][$strain] = (int) $matches[3];
+            } elseif (str_starts_with($line, '[')) {
+                $readingOptimumTable = false;
             }
         }
         if ($currentBoard !== null && isset($currentBoard['deal'])) {
@@ -723,14 +689,26 @@ class TournamentController extends Controller
                     ];
                 }
 
+                $vulnerability = $bData['vulnerability'] ?? $this->hydrationService->calculateVulnerability((int) $bData['board_number']);
+                $doubleDummyAnalysis = null;
+
+                if (! empty($bData['double_dummy_table'])) {
+                    $doubleDummyAnalysis = $this->doubleDummyAnalysisService->fromOptimumResultTable(
+                        $bData['double_dummy_table'],
+                        $vulnerability,
+                        $bData['optimum_score'] ?? null
+                    );
+                }
+
                 Board::create([
                     'board_set_id' => $boardSet->id,
                     'board_number' => (int) $bData['board_number'],
-                    'vulnerability' => $this->hydrationService->calculateVulnerability((int) $bData['board_number']),
+                    'vulnerability' => $vulnerability,
                     'cards_north' => $mappedHands['North'],
                     'cards_south' => $mappedHands['South'],
                     'cards_east' => $mappedHands['East'],
                     'cards_west' => $mappedHands['West'],
+                    'double_dummy_analysis' => $doubleDummyAnalysis,
                 ]);
             }
 

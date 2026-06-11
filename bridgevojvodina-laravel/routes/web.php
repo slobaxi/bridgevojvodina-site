@@ -36,9 +36,7 @@ Route::middleware('auth')->group(function () {
     Route::get('tournament-configurations', [TournamentConfigurationController::class, 'index'])->name('tournament-configurations.index');
     Route::post('tournaments/{tournament}/board-sets', [TournamentController::class, 'uploadBoardSet'])->name('tournaments.board-sets.upload');
     Route::delete('tournaments/{tournament}/board-sets/{boardSet}', [TournamentController::class, 'destroyBoardSet'])->name('tournaments.board-sets.destroy');
-    Route::post('tournaments/{tournament}/board-sets/{boardSet}/double-dummy', [TournamentController::class, 'analyzeBoardSetDoubleDummy'])->name('tournaments.board-sets.double-dummy');
     Route::patch('tournaments/{tournament}/board-sets/{boardSet}/boards/{board}', [TournamentController::class, 'updateBoard'])->name('tournaments.board-sets.boards.update');
-    Route::post('tournaments/{tournament}/board-sets/{boardSet}/boards/{board}/double-dummy', [TournamentController::class, 'analyzeBoardDoubleDummy'])->name('tournaments.board-sets.boards.double-dummy');
     Route::get('tournaments/{tournament}/teams/numbers', [TournamentController::class, 'editTeamNumbers'])->name('tournaments.teams.numbers.edit');
     Route::patch('tournaments/{tournament}/teams/numbers', [TournamentController::class, 'updateTeamNumbers'])->name('tournaments.teams.numbers.update');
     Route::post('tournaments/{tournament}/teams', [TournamentController::class, 'addTeam'])->name('tournaments.teams.add');

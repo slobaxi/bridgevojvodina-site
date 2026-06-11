@@ -10,12 +10,6 @@
                         {{ __('Butler') }}
                     </a>
                 @endif
-                <form method="POST" action="{{ route('tournaments.board-sets.double-dummy', [$tournament, $boardSet]) }}" onsubmit="return confirm('{{ __('Analyze all boards in this set? This can take a moment.') }}')">
-                    @csrf
-                    <x-primary-button type="submit">
-                        {{ __('Analyze All Boards') }}
-                    </x-primary-button>
-                </form>
                 <form method="POST" action="{{ route('tournaments.board-sets.destroy', [$tournament, $boardSet]) }}" onsubmit="return confirm('{{ __('Are you sure?') }}')">
                     @csrf
                     @method('DELETE')
@@ -222,19 +216,20 @@
                                                 <p class="mt-1 text-sm font-bold text-gray-800">
                                                     {{ $bestContract['description'] }}
                                                 </p>
+                                                @if(!empty($analysis['optimum_score']))
+                                                    <p class="mt-1 text-xs font-semibold text-gray-500">
+                                                        {{ __('Optimum') }}: {{ $analysis['optimum_score'] }}
+                                                    </p>
+                                                @endif
                                             @else
                                                 <p class="mt-1 text-sm font-semibold text-gray-400">
                                                     {{ __('No double dummy analysis yet.') }}
                                                 </p>
+                                                <p class="mt-1 text-xs font-semibold text-gray-400">
+                                                    {{ __('Upload a PBN file with OptimumResultTable to import it.') }}
+                                                </p>
                                             @endif
                                         </div>
-
-                                        <form method="POST" action="{{ route('tournaments.board-sets.boards.double-dummy', [$tournament, $boardSet, $board]) }}">
-                                            @csrf
-                                            <x-primary-button type="submit">
-                                                {{ $analysis ? __('Recalculate Double Dummy') : __('Add Double Dummy Analyze') }}
-                                            </x-primary-button>
-                                        </form>
                                     </div>
 
                                     @if($analysisTable)
@@ -273,7 +268,7 @@
 
                                             @if(!empty($analysis['computed_at']))
                                                 <p class="mt-3 text-center text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                                                    {{ __('Computed') }} {{ \Illuminate\Support\Carbon::parse($analysis['computed_at'])->diffForHumans() }}
+                                                    {{ __('Imported') }} {{ \Illuminate\Support\Carbon::parse($analysis['computed_at'])->diffForHumans() }}
                                                 </p>
                                             @endif
                                         </div>

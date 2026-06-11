@@ -57,14 +57,6 @@ if ($zip->open($zipPath) === TRUE) {
             echo "Migration Exit Code: $exitCode\n";
             echo "Migration Output:\n" . \Illuminate\Support\Facades\Artisan::output() . "\n";
 
-            $ddsAnalyzerPath = $extractPath . '/storage/app/bin/dds_analyze';
-            if (file_exists($ddsAnalyzerPath)) {
-                chmod($ddsAnalyzerPath, 0755);
-                echo "\nDDS analyzer permissions set at: $ddsAnalyzerPath\n";
-            } else {
-                echo "\nDDS analyzer binary not found at: $ddsAnalyzerPath\n";
-            }
-            
             echo "\n--- Optimizing ---\n";
             $exitCode = $kernel->call('optimize');
             echo "Optimize Exit Code: $exitCode\n";

@@ -12,8 +12,6 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      with:
-        submodules: recursive
       
     - name: Setup PHP
       uses: shivammathur/setup-php@v2
@@ -38,22 +36,6 @@ jobs:
         cd bridgevojvodina-laravel
         npm ci
         npm run build
-
-    - name: Build DDS Analyzer
-      run: |
-        test -d dds/library/src || { echo "::error::DDS source tree missing. Commit dds as a submodule or vendored dependency."; exit 1; }
-        mkdir -p bridgevojvodina-laravel/storage/app/bin
-        g++ -std=c++20 -O3 -pthread -static-libstdc++ -static-libgcc \
-          -I dds/library/src \
-          -I dds/library/src/api \
-          $(find dds/library/src -name "*.cpp" -print) \
-          bridgevojvodina-laravel/scripts/dds_analyze.cpp \
-          -o bridgevojvodina-laravel/storage/app/bin/dds_analyze
-        chmod 755 bridgevojvodina-laravel/storage/app/bin/dds_analyze
-        PBN='N:QJ6.K652.J85.T98 873.J97.AT764.Q4 K5.T83.KQ9.A7652 AT942.AQ4.32.KJ3'
-        DDS_SMOKE_OUTPUT=$(bridgevojvodina-laravel/storage/app/bin/dds_analyze "$PBN")
-        echo "$DDS_SMOKE_OUTPUT"
-        echo "$DDS_SMOKE_OUTPUT" | grep -q '"engine":"dds"'
         
     - name: Create Deployment Archive
       env:
