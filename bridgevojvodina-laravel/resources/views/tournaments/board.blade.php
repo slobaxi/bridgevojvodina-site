@@ -102,6 +102,75 @@
                         @endif
                     </div>
 
+                    @php
+                        $physicalBoard = $boardData['physical_board'] ?? null;
+                        $analysis = $physicalBoard?->double_dummy_analysis;
+                        $analysisTable = $analysis['table'] ?? null;
+                        $bestContract = $analysis['best_contract'] ?? null;
+                        $displayHands = ['N' => __('N'), 'S' => __('S'), 'E' => __('E'), 'W' => __('W')];
+                        $displayStrains = [
+                            'NT' => __('NT'),
+                            'S' => '&spades;',
+                            'H' => '&hearts;',
+                            'D' => '&diams;',
+                            'C' => '&clubs;',
+                        ];
+                    @endphp
+
+                    @if($analysisTable)
+                        <div class="mx-auto mb-10 max-w-xl rounded-xl border border-gray-200 bg-white shadow-sm">
+                            <div class="border-b border-gray-200 p-4">
+                                <h3 class="text-sm font-black uppercase tracking-widest text-gray-500">
+                                    {{ __('Double Dummy Analysis') }}
+                                </h3>
+                                @if($bestContract)
+                                    <p class="mt-1 text-sm font-bold text-gray-800">
+                                        {{ $bestContract['description'] }}
+                                    </p>
+                                @endif
+                                @if(!empty($analysis['optimum_score']))
+                                    <p class="mt-1 text-xs font-semibold text-gray-500">
+                                        {{ __('Optimum') }}: {{ $analysis['optimum_score'] }}
+                                    </p>
+                                @endif
+                            </div>
+
+                            <div class="overflow-x-auto p-4">
+                                <table class="mx-auto border-collapse text-center text-lg">
+                                    <thead>
+                                        <tr class="text-gray-500">
+                                            <th class="w-12 border-b border-gray-300 px-3 py-1"></th>
+                                            @foreach($displayStrains as $strain => $label)
+                                                <th class="w-16 border-b border-gray-300 px-3 py-1 font-semibold {{ in_array($strain, ['H', 'D'], true) ? 'text-red-600' : 'text-gray-700' }}">
+                                                    {!! $label !!}
+                                                </th>
+                                            @endforeach
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach($displayHands as $hand => $label)
+                                            <tr>
+                                                <th class="border-r border-gray-300 px-3 py-1 font-semibold text-amber-900">
+                                                    {{ $label }}
+                                                </th>
+                                                @foreach(array_keys($displayStrains) as $strain)
+                                                    @php
+                                                        $isBestCell = $bestContract
+                                                            && ($bestContract['declarer'] ?? null) === $hand
+                                                            && ($bestContract['strain'] ?? null) === $strain;
+                                                    @endphp
+                                                    <td class="border border-gray-200 px-3 py-1 font-semibold {{ $isBestCell ? 'bg-emerald-300 text-emerald-950' : 'text-gray-700' }}">
+                                                        {{ $analysisTable[$hand]['strains'][$strain] ?? '-' }}
+                                                    </td>
+                                                @endforeach
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    @endif
+
                     <div class="overflow-x-auto">
                         <table class="min-w-full text-sm text-center border-collapse">
                             <thead class="bg-gray-50 font-bold text-gray-700">

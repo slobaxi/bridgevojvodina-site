@@ -130,6 +130,41 @@ class TournamentShowTest extends TestCase
     public function test_tournament_board_page_displays_aggregated_results()
     {
         $tournament = $this->createTournamentWithResults();
+        $boardSet = \App\Models\BoardSet::create([
+            'tournament_id' => $tournament->id,
+            'name' => 'Round 1 Boards',
+        ]);
+
+        \App\Models\Board::create([
+            'board_set_id' => $boardSet->id,
+            'board_number' => 1,
+            'vulnerability' => 'None',
+            'cards_north' => ['S' => 'AKQJ', 'H' => 'AKQ', 'D' => 'AKQ', 'C' => 'AKQ'],
+            'cards_south' => ['S' => '6543', 'H' => '765', 'D' => '765', 'C' => '765'],
+            'cards_east' => ['S' => 'T987', 'H' => 'T98', 'D' => 'T98', 'C' => 'T98'],
+            'cards_west' => ['S' => '2', 'H' => 'J432', 'D' => 'J432', 'C' => 'J432'],
+            'double_dummy_analysis' => [
+                'engine' => 'pbn',
+                'optimum_score' => 'NS 4S; 420',
+                'table' => [
+                    'N' => ['label' => 'North', 'strains' => ['NT' => 9, 'S' => 10, 'H' => 7, 'D' => 6, 'C' => 6]],
+                    'S' => ['label' => 'South', 'strains' => ['NT' => 9, 'S' => 10, 'H' => 7, 'D' => 6, 'C' => 6]],
+                    'E' => ['label' => 'East', 'strains' => ['NT' => 4, 'S' => 2, 'H' => 5, 'D' => 7, 'C' => 7]],
+                    'W' => ['label' => 'West', 'strains' => ['NT' => 4, 'S' => 2, 'H' => 5, 'D' => 7, 'C' => 7]],
+                ],
+                'best_contract' => [
+                    'contract' => '4S',
+                    'strain' => 'S',
+                    'declarer' => 'N',
+                    'description' => '4 Spades by North. 420 points.',
+                ],
+            ],
+        ]);
+
+        $results = $tournament->team_results;
+        $results->rounds[0]->board_set_id = $boardSet->id;
+        $tournament->team_results = $results;
+        $tournament->save();
 
         $response = $this->get("/tournaments/{$tournament->id}/round/r1/board/1");
 
@@ -144,6 +179,9 @@ class TournamentShowTest extends TestCase
         $response->assertSee('4');
         $response->assertSee('&spades;', false);
         $response->assertSee('3NT');
+        $response->assertSee('Double Dummy Analysis');
+        $response->assertSee('4 Spades by North. 420 points.');
+        $response->assertSee('NS 4S; 420');
     }
 
     public function test_tournament_details_page_is_accessible()
