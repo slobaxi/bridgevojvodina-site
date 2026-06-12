@@ -226,6 +226,62 @@ EOD;
             ->assertSee('Save Board');
     }
 
+    public function test_director_can_export_board_set_as_pbn()
+    {
+        $director = User::factory()->create(['role' => User::ROLE_DIRECTOR]);
+        $tournament = Tournament::factory()->create([
+            'user_id' => $director->id,
+            'team_results' => [
+                'rounds' => [['id' => 'r1', 'name' => 'Round 1', 'board_set_id' => 1, 'matches' => []]],
+                'teams' => [],
+            ],
+        ]);
+        $boardSet = BoardSet::create([
+            'id' => 1,
+            'tournament_id' => $tournament->id,
+            'name' => 'Round 1 Boards',
+        ]);
+        Board::create([
+            'board_set_id' => $boardSet->id,
+            'board_number' => 1,
+            'vulnerability' => 'None',
+            'cards_north' => ['S' => 'AQ', 'H' => '9852', 'D' => 'QJT84', 'C' => '63'],
+            'cards_east' => ['S' => 'KJ93', 'H' => 'KQT4', 'D' => 'K965', 'C' => '5'],
+            'cards_south' => ['S' => '87654', 'H' => 'J73', 'D' => 'A7', 'C' => 'AK2'],
+            'cards_west' => ['S' => 'T2', 'H' => 'A6', 'D' => '32', 'C' => 'QJT9874'],
+            'double_dummy_analysis' => [
+                'engine' => 'pbn',
+                'optimum_score' => 'EW 2C; -90',
+                'table' => [
+                    'W' => ['label' => 'West', 'strains' => ['S' => 7, 'H' => 7, 'D' => 6, 'C' => 8, 'NT' => 6]],
+                    'N' => ['label' => 'North', 'strains' => ['S' => 5, 'H' => 6, 'D' => 7, 'C' => 4, 'NT' => 6]],
+                    'E' => ['label' => 'East', 'strains' => ['S' => 7, 'H' => 7, 'D' => 6, 'C' => 8, 'NT' => 6]],
+                    'S' => ['label' => 'South', 'strains' => ['S' => 5, 'H' => 6, 'D' => 7, 'C' => 4, 'NT' => 5]],
+                ],
+            ],
+        ]);
+
+        $this->actingAs($director)
+            ->get(route('tournaments.edit', $tournament))
+            ->assertSee('Export PBN')
+            ->assertSee(route('tournaments.board-sets.export-pbn', [$tournament, $boardSet]), false);
+
+        $response = $this->actingAs($director)
+            ->get(route('tournaments.board-sets.export-pbn', [$tournament, $boardSet]));
+
+        $response->assertOk();
+        $response->assertHeader('Content-Type', 'application/octet-stream');
+        $response->assertHeader('Content-Disposition', 'attachment; filename="round-1-boards.pbn"');
+        $response->assertSee('[Event "Round 1 Boards"]', false);
+        $response->assertSee('[Board "1"]', false);
+        $response->assertSee('[Dealer "N"]', false);
+        $response->assertSee('[Deal "N:AQ.9852.QJT84.63 KJ93.KQT4.K965.5 87654.J73.A7.AK2 T2.A6.32.QJT9874"]', false);
+        $response->assertSee('[OptimumScore "EW 2C; -90"]', false);
+        $response->assertSee('[OptimumResultTable "Declarer;Denomination;Result"]', false);
+        $response->assertSee('W C 8', false);
+        $response->assertSee('N N 6', false);
+    }
+
     public function test_board_edit_rejects_duplicate_cards()
     {
         $director = User::factory()->create(['role' => User::ROLE_DIRECTOR]);

@@ -274,6 +274,9 @@
                                                                         <span class="font-bold text-indigo-600 group-hover:text-indigo-900 group-hover:underline">{{ $set->name }}</span>
                                                                         <span class="text-[10px] text-gray-400">{{ $set->created_at->format('d.m.Y H:i') }}</span>
                                                                     </a>
+                                                                    <a href="{{ route('tournaments.board-sets.export-pbn', [$tournament, $set]) }}" class="inline-flex w-fit items-center px-3 py-1 bg-white border border-gray-300 rounded-md font-semibold text-[10px] text-gray-700 uppercase tracking-widest shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition ease-in-out duration-150">
+                                                                        {{ __('Export PBN') }}
+                                                                    </a>
                                                                 @else
                                                                     <span class="text-red-400 italic text-xs">{{ __('Set not found') }}</span>
                                                                 @endif

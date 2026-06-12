@@ -388,6 +388,26 @@ class TournamentController extends Controller
         return view('tournaments.board-sets.show', compact('tournament', 'boardSet', 'boards', 'boardResults'));
     }
 
+    public function exportBoardSetPbn(string $tournamentId, BoardSet $boardSet)
+    {
+        $tournament = $this->resolveTournament($tournamentId);
+        $this->authorizeTournament($tournament);
+
+        if ($boardSet->tournament_id !== $tournament->id && $boardSet->tournament_configuration_id !== $tournament->id) {
+            abort(404);
+        }
+
+        $boardSet->load(['boards' => fn($query) => $query->orderBy('board_number')]);
+
+        $content = $this->buildBoardSetPbn($boardSet);
+        $filename = Str::slug($boardSet->name ?: 'board-set') . '.pbn';
+
+        return response($content, 200, [
+            'Content-Type' => 'application/octet-stream',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ]);
+    }
+
     public function destroyBoardSet(string $tournamentId, BoardSet $boardSet): RedirectResponse
     {
         $tournament = $this->resolveTournament($tournamentId);
@@ -525,6 +545,99 @@ class TournamentController extends Controller
         }
 
         return $normalizedHands;
+    }
+
+    private function buildBoardSetPbn(BoardSet $boardSet): string
+    {
+        return $boardSet->boards
+            ->sortBy('board_number')
+            ->map(fn(Board $board): string => $this->boardToPbnBlock($boardSet, $board))
+            ->implode("\n\n") . "\n";
+    }
+
+    private function boardToPbnBlock(BoardSet $boardSet, Board $board): string
+    {
+        $dealer = $this->pbnDealer((int) $board->board_number);
+        $vulnerability = $board->vulnerability ?: $this->pbnBoardVulnerability((int) $board->board_number);
+        $analysis = $board->double_dummy_analysis ?? [];
+        $lines = [
+            '[Event "' . $this->escapePbnTag($boardSet->name ?: 'Board Set') . '"]',
+            '[Board "' . (int) $board->board_number . '"]',
+            '[Dealer "' . $dealer . '"]',
+            '[Vulnerable "' . $this->pbnVulnerability($vulnerability) . '"]',
+            '[Deal "' . $dealer . ':' . $this->pbnDealHandsFromDealer($board, $dealer) . '"]',
+        ];
+
+        if (! empty($analysis['optimum_score'])) {
+            $lines[] = '[OptimumScore "' . $this->escapePbnTag((string) $analysis['optimum_score']) . '"]';
+        }
+
+        if (! empty($analysis['table']) && is_array($analysis['table'])) {
+            $lines[] = '[OptimumResultTable "Declarer;Denomination;Result"]';
+
+            foreach (['W', 'N', 'E', 'S'] as $hand) {
+                foreach (['S', 'H', 'D', 'C', 'NT'] as $strain) {
+                    $denomination = $strain === 'NT' ? 'N' : $strain;
+                    $tricks = (int) ($analysis['table'][$hand]['strains'][$strain] ?? 0);
+                    $lines[] = "{$hand} {$denomination} {$tricks}";
+                }
+            }
+        }
+
+        return implode("\n", $lines);
+    }
+
+    private function pbnDealHandsFromDealer(Board $board, string $dealer): string
+    {
+        $hands = [
+            'N' => $board->cards_north ?? [],
+            'E' => $board->cards_east ?? [],
+            'S' => $board->cards_south ?? [],
+            'W' => $board->cards_west ?? [],
+        ];
+        $seatOrder = ['N', 'E', 'S', 'W'];
+        $startIndex = array_search($dealer, $seatOrder, true) ?: 0;
+
+        return collect(range(0, 3))
+            ->map(fn(int $offset): string => $this->pbnHand($hands[$seatOrder[($startIndex + $offset) % 4]]))
+            ->implode(' ');
+    }
+
+    private function pbnHand(array $hand): string
+    {
+        return collect(['S', 'H', 'D', 'C'])
+            ->map(fn(string $suit): string => strtoupper(str_replace('10', 'T', preg_replace('/\s+/', '', (string) ($hand[$suit] ?? '')) ?? '')))
+            ->implode('.');
+    }
+
+    private function pbnVulnerability(string $vulnerability): string
+    {
+        return match ($vulnerability) {
+            'NS' => 'NS',
+            'EW' => 'EW',
+            'All' => 'All',
+            default => 'None',
+        };
+    }
+
+    private function pbnDealer(int $boardNumber): string
+    {
+        return ['N', 'E', 'S', 'W'][($boardNumber - 1) % 4];
+    }
+
+    private function pbnBoardVulnerability(int $boardNumber): string
+    {
+        return [
+            'None', 'NS', 'EW', 'All',
+            'NS', 'EW', 'All', 'None',
+            'EW', 'All', 'None', 'NS',
+            'All', 'None', 'NS', 'EW',
+        ][($boardNumber - 1) % 16];
+    }
+
+    private function escapePbnTag(string $value): string
+    {
+        return str_replace(['\\', '"'], ['\\\\', '\\"'], $value);
     }
 
     private function normalizePbnVulnerability(string $vulnerability): string

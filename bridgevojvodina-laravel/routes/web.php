@@ -35,6 +35,7 @@ Route::middleware('auth')->group(function () {
     Route::resource('tournaments', TournamentController::class)->except(['index', 'show']);
     Route::get('tournament-configurations', [TournamentConfigurationController::class, 'index'])->name('tournament-configurations.index');
     Route::post('tournaments/{tournament}/board-sets', [TournamentController::class, 'uploadBoardSet'])->name('tournaments.board-sets.upload');
+    Route::get('tournaments/{tournament}/board-sets/{boardSet}/export-pbn', [TournamentController::class, 'exportBoardSetPbn'])->name('tournaments.board-sets.export-pbn');
     Route::delete('tournaments/{tournament}/board-sets/{boardSet}', [TournamentController::class, 'destroyBoardSet'])->name('tournaments.board-sets.destroy');
     Route::patch('tournaments/{tournament}/board-sets/{boardSet}/boards/{board}', [TournamentController::class, 'updateBoard'])->name('tournaments.board-sets.boards.update');
     Route::get('tournaments/{tournament}/teams/numbers', [TournamentController::class, 'editTeamNumbers'])->name('tournaments.teams.numbers.edit');
